@@ -31,7 +31,5 @@ jobs:
         with:
           context: .
           push: true
-          # Aquí agregamos el github.ref_name para que tome el Tag automáticamente
           tags: |
             ${{ secrets.DOCKER_USERNAME }}/${{ inputs.image_name }}:latest
-            ${{ secrets.DOCKER_USERNAME }}/${{ inputs.image_name }}:${{ github.ref_name }}
