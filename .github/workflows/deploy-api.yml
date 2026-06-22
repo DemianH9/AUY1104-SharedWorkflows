@@ -125,3 +125,13 @@ jobs:
           script: |
             kubectl rollout undo deployment/demo-api
             kubectl rollout status deployment/demo-api --timeout=60s
+      - name: Despliegue automatico en Servidor k3s via SSH
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ inputs.k3s-server-public-ip }}
+          username: ubuntu
+          key: ${{ secrets.EA2_SSH_PRIVATE_KEY }}
+          script: |
+            # Aquí van tus comandos de despliegue
+            kubectl apply -f k8s/deployment.yaml
+            kubectl rollout status deployment/demo-api --timeout=60s
