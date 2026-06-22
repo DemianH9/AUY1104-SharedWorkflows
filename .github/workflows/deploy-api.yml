@@ -132,6 +132,5 @@ jobs:
           username: ubuntu
           key: ${{ secrets.EA2_SSH_PRIVATE_KEY }}
           script: |
-            # Aquí van tus comandos de despliegue
             kubectl apply -f k8s/deployment.yaml
             kubectl rollout status deployment/demo-api --timeout=60s
