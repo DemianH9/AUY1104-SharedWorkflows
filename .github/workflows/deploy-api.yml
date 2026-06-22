@@ -101,22 +101,27 @@ jobs:
     needs: build-and-push
     runs-on: ubuntu-latest
     steps:
-      - uses: webfactory/ssh-agent@v0.9.0
-        with:
-          context: .
-          push: true
-          # Aquí agregamos el github.ref_name para que tome el Tag automáticamente
-          tags: |
-            ${{ secrets.DOCKER_USERNAME }}/${{ inputs.image_name }}:latest
-            ${{ secrets.DOCKER_USERNAME }}/${{ inputs.image_name }}:${{ github.ref_name }}
-      - name: Deploy to k3s
+      - name: 1 · Descargar el código del repositorio
+        uses: actions/checkout@v4
+
+      - name: 2 · Ejecutar despliegue remotamente por SSH
         id: deploy
-        run: |
-          kubectl apply -f k8s/deployment.yaml
-          kubectl rollout status deployment/demo-api --timeout=60s
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ inputs.k3s-server-public-ip }}
+          username: ubuntu
+          key: ${{ secrets.EA2_SSH_PRIVATE_KEY }}
+          script: |
+            kubectl apply -f k8s/deployment.yaml
+            kubectl rollout status deployment/demo-api --timeout=60s
 
       - name: Rollback automático
         if: failure()
-        run: |
-          kubectl rollout undo deployment/demo-api
-          kubectl rollout status deployment/demo-api --timeout=60s
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ inputs.k3s-server-public-ip }}
+          username: ubuntu
+          key: ${{ secrets.EA2_SSH_PRIVATE_KEY }}
+          script: |
+            kubectl rollout undo deployment/demo-api
+            kubectl rollout status deployment/demo-api --timeout=60s
