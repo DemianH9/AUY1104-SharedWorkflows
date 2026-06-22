@@ -35,3 +35,14 @@ jobs:
           tags: |
             ${{ secrets.DOCKER_USERNAME }}/${{ inputs.image_name }}:latest
             ${{ secrets.DOCKER_USERNAME }}/${{ inputs.image_name }}:${{ github.ref_name }}
+      - name: Deploy to k3s
+        id: deploy
+        run: |
+          kubectl apply -f k8s/deployment.yaml
+          kubectl rollout status deployment/demo-api --timeout=60s
+
+      - name: Rollback automático
+        if: failure()
+        run: |
+          kubectl rollout undo deployment/demo-api
+          kubectl rollout status deployment/demo-api --timeout=60s
