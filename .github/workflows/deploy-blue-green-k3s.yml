@@ -57,4 +57,11 @@ jobs:
           APP: ${{ inputs.app-name }}
           NS: ${{ inputs.namespace }}
         run: |
-          CURRENT=$(kubectl get service "$APP" -n "$NS" -o
+          CURRENT=$(kubectl get service "$APP" -n "$NS" -o jsonpath="{.spec.selector.color}" 2>/dev/null || echo "")
+          if [ "$CURRENT" = "blue" ]; then
+            echo "live=blue" >> "$GITHUB_OUTPUT"
+            echo "idle=green" >> "$GITHUB_OUTPUT"
+          else
+            echo "live=green" >> "$GITHUB_OUTPUT"
+            echo "idle=blue" >> "$GITHUB_OUTPUT"
+          fi
