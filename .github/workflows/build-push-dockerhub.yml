@@ -58,3 +58,6 @@ jobs:
           docker push "$IMAGE:$IMAGE_TAG"
           docker push "$IMAGE:latest"
           echo "image=$IMAGE:$IMAGE_TAG" >> "$GITHUB_OUTPUT"
+
+      - name: DEBUG - Confirmar output generado
+        run: echo "OUTPUT image generado = '${{ steps.build.outputs.image }}'"
