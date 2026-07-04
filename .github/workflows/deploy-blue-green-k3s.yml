@@ -65,3 +65,71 @@ jobs:
             echo "live=green" >> "$GITHUB_OUTPUT"
             echo "idle=blue" >> "$GITHUB_OUTPUT"
           fi
+
+      - name: Desplegar nueva versión en el color inactivo
+        env:
+          COLOR: ${{ steps.color.outputs.idle }}
+          IMAGE: ${{ inputs.image-uri }}
+          APP: ${{ inputs.app-name }}
+          NS: ${{ inputs.namespace }}
+          PORT: ${{ inputs.container-port }}
+        run: |
+          echo "DEBUG dentro del step: IMAGE='$IMAGE'"
+          sed -e "s|__COLOR__|$COLOR|g" \
+              -e "s|__IMAGE__|$IMAGE|g" \
+              -e "s|__APP__|$APP|g" \
+              -e "s|__PORT__|$PORT|g" \
+              k8s/deployment-template.yaml > deployment-generated.yaml
+          cat deployment-generated.yaml
+          kubectl apply -n "$NS" -f deployment-generated.yaml
+          kubectl rollout status deployment/${APP}-${COLOR} -n "$NS" --timeout=120s
+
+      - name: Validación de salud (Health Check) antes de mover tráfico
+        id: healthcheck
+        env:
+          COLOR: ${{ steps.color.outputs.idle }}
+          APP: ${{ inputs.app-name }}
+          NS: ${{ inputs.namespace }}
+          PORT: ${{ inputs.container-port }}
+        run: |
+          kubectl port-forward -n "$NS" deployment/${APP}-${COLOR} 8080:$PORT &
+          PF_PID=$!
+          sleep 6
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/health || echo "000")
+          kill $PF_PID 2>/dev/null || true
+          echo "Status recibido: $STATUS"
+          if [ "$STATUS" != "200" ]; then
+            echo "::error::Health check falló con status $STATUS"
+            exit 1
+          fi
+
+      - name: Mover el 100% del tráfico al color nuevo
+        if: success()
+        env:
+          COLOR: ${{ steps.color.outputs.idle }}
+          APP: ${{ inputs.app-name }}
+          NS: ${{ inputs.namespace }}
+        run: |
+          kubectl patch service "$APP" -n "$NS" -p "{\"spec\":{\"selector\":{\"app\":\"$APP\",\"color\":\"$COLOR\"}}}"
+          echo "✅ Tráfico movido a color: $COLOR"
+
+      - name: Escalar a cero el color anterior (limpieza, no crítico)
+        if: success()
+        env:
+          LIVE_ANTERIOR: ${{ steps.color.outputs.live }}
+          APP: ${{ inputs.app-name }}
+          NS: ${{ inputs.namespace }}
+        run: |
+          kubectl scale deployment/${APP}-${LIVE_ANTERIOR} -n "$NS" --replicas=0 || true
+
+      - name: ROLLBACK AUTOMÁTICO (la validación de salud falló)
+        if: failure()
+        env:
+          COLOR: ${{ steps.color.outputs.idle }}
+          LIVE: ${{ steps.color.outputs.live }}
+          APP: ${{ inputs.app-name }}
+          NS: ${{ inputs.namespace }}
+        run: |
+          echo "::warning::Ejecutando rollback automático. Tráfico permanece en $LIVE"
+          kubectl patch service "$APP" -n "$NS" -p "{\"spec\":{\"selector\":{\"app\":\"$APP\",\"color\":\"$LIVE\"}}}" || true
+          kubectl delete deployment "${APP}-${COLOR}" -n "$NS" --ignore-not-found=true
